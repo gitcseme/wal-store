@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "cli",
+    srcs = ["main.go"],
+    importpath = "walstore/cmd/cli",
+    visibility = ["//visibility:public"],
+    deps = ["//internal/wal"],
+)
+
+go_binary(
+    name = "walstore",
+    embed = [":cli"],
+    visibility = ["//visibility:public"],
+)
