@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+option go_package = "walproto/proto";
+
+message WalRecord {
+    uint64 logSequenceNumber = 1; // Log Sequence Number
+    uint64 timestamp = 2; // Timestamp of the record
+    bytes data = 3; // The actual data of the record
+    uint32 checksum = 4; // Checksum for data integrity
+}
