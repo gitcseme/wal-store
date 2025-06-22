@@ -5,10 +5,7 @@ go_library(
     srcs = ["main.go"],
     importpath = "walstore/cmd/cli",
     visibility = ["//visibility:public"],
-    deps = [
-        "//internal/wal",
-        "//proto:proto_go_proto",
-    ],
+    deps = ["//internal/wal"],
 )
 
 go_binary(

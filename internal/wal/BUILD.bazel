@@ -2,7 +2,11 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "wal",
-    srcs = ["wal.go"],
+    srcs = [
+        "config.go",
+        "model.go",
+        "wal.go",
+    ],
     importpath = "walstore/internal/wal",
     visibility = ["//:__subpackages__"],
     deps = [
