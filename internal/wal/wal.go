@@ -166,7 +166,9 @@ func (wal *WriteAheadLog) syncPeriodically() {
 	for {
 		select {
 		case <-wal.syncTimer.C:
+			wal.lock.Lock()
 			err := wal.Sync()
+			wal.lock.Unlock()
 
 			if err != nil {
 				fmt.Printf("Error syncing WAL: %v\n", err)
