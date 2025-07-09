@@ -9,6 +9,7 @@ type Config struct {
 	MaxFileSize     uint64
 	MaxSegments     int
 	EnableForceSync bool
+	SyncInterval    uint32 // in milliseconds
 }
 
 func CreateDefaultConfig(logDirectory string) *Config {
@@ -17,6 +18,7 @@ func CreateDefaultConfig(logDirectory string) *Config {
 		MaxFileSize:     1024 * 1024 * 10, // 10 MB
 		MaxSegments:     5,
 		EnableForceSync: true,
+		SyncInterval:    500, // 500 milliseconds
 	}
 }
 

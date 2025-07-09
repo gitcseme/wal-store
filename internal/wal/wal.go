@@ -21,6 +21,10 @@ var (
 )
 
 func StartLogger(config *Config) (*WriteAheadLog, error) {
+	if config.SyncInterval > 0 {
+		SyncInterval = time.Duration(config.SyncInterval) * time.Millisecond
+	}
+
 	if err := validateConfig(config); err != nil {
 		return nil, err
 	}
@@ -159,7 +163,7 @@ func (wal *WriteAheadLog) getLastLogSequenceNumber() (uint64, error) {
 		return 0, nil // No records found, return 0
 	}
 	lastRecord := records[len(records)-1]
-	return lastRecord.LogSequenceNumber, nil
+	return lastRecord.GetLogSequenceNumber(), nil
 }
 
 func (wal *WriteAheadLog) syncPeriodically() {
