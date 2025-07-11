@@ -18,7 +18,7 @@ func CreateDefaultConfig(logDirectory string) *Config {
 		MaxFileSize:     1024 * 1024 * 10, // 10 MB
 		MaxSegments:     5,
 		EnableForceSync: true,
-		SyncInterval:    500, // 500 milliseconds
+		SyncInterval:    300, // 500 milliseconds
 	}
 }
 

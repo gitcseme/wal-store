@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tests",
+    srcs = ["test_record.go"],
+    importpath = "walstore/internal/tests",
+    visibility = ["//:__subpackages__"],
+)
+
+go_test(
+    name = "tests_test",
+    srcs = ["wal_test.go"],
+    embed = [":tests"],
+    deps = [
+        "//internal/wal",
+        "@com_github_stretchr_testify//assert",
+    ],
+)
