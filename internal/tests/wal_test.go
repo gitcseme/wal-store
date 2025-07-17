@@ -11,8 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	LogDirectory = "/tmp/walogs"
+)
+
 func Test_WriteAndRecover(t *testing.T) {
-	logDirectory := "/tmp/wal_test"
+	logDirectory := LogDirectory + "/wal_test"
 	defer os.RemoveAll(logDirectory) // Clean up after test
 
 	defaultConfig := wal.CreateDefaultConfig(logDirectory)
@@ -52,7 +56,7 @@ func Test_WriteAndRecover(t *testing.T) {
 }
 
 func Test_LogSequenceNumber(t *testing.T) {
-	logDirectory := "/tmp/wal_test_seq"
+	logDirectory := LogDirectory + "/wal_seq_test"
 	defer os.RemoveAll(logDirectory) // Clean up after test
 
 	defaultConfig := wal.CreateDefaultConfig(logDirectory)
@@ -89,21 +93,19 @@ func Test_LogSequenceNumber(t *testing.T) {
 }
 
 func Test_WALRotation(t *testing.T) {
-	logDirectory := "/tmp/wal_test_rotation"
-	// defer os.RemoveAll(logDirectory) // Clean up after test
+	logDirectory := LogDirectory + "/wal_rotation_test"
 
 	defaultConfig := wal.CreateDefaultConfig(logDirectory)
-	defaultConfig.MaxFileSize = 600 // Set a small max file size for testing
+	defaultConfig.MaxFileSize = 1024 * 1 // Set a small max file size for testing
 
 	walog, err := wal.StartLogger(defaultConfig)
-	if err != nil {
-		t.Fatalf("Failed to start logger: %v", err)
-	}
+	assert.NoError(t, err, "Failed to start logger")
+	defer walog.Close()
 
 	var testData []TestRecord
 	for i := 0; i < 100; i++ {
 		testData = append(testData, TestRecord{
-			Op:    i + 1,
+			Op:    (i + 1) % 3,
 			Key:   fmt.Sprintf("key%d", i+1),
 			Value: fmt.Sprintf("value%d", i+1),
 		})
@@ -121,8 +123,8 @@ func Test_WALRotation(t *testing.T) {
 	assert.NoError(t, err, "Failed to list WAL segment files")
 
 	for _, file := range files {
-		fmt.Printf("Segment file: %s\n", file)
 		fileInfo, err := os.Stat(file)
+		fmt.Printf("Segment file: %s size: %d\n", file, fileInfo.Size())
 		assert.NoError(t, err, "Failed to get file info")
 		assert.True(t, fileInfo.Size() <= defaultConfig.MaxFileSize, "WAL file size %d exceeds limit", fileInfo.Size())
 	}

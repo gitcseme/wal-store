@@ -10,13 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	pb "walproto/proto"
+	pb "walstore/proto"
 
 	gpb "google.golang.org/protobuf/proto"
 )
 
 var (
-	SyncInterval  = 500 * time.Millisecond // Default sync interval
+	SyncInterval  = 200 * time.Millisecond // Default sync interval
 	SegmentPrefix = "wal-segment-"         // Default segment file prefix
 )
 
@@ -40,7 +40,7 @@ func StartLogger(config *Config) (*WriteAheadLog, error) {
 
 	// seek to the end of the file to start writing new records
 	if _, err := segmentFile.Seek(0, io.SeekEnd); err != nil {
-		return nil, fmt.Errorf("Failed to seek: %w", err)
+		return nil, fmt.Errorf("failed to seek: %w", err)
 	}
 
 	context, cancel := context.WithCancel(context.Background())
@@ -60,7 +60,7 @@ func StartLogger(config *Config) (*WriteAheadLog, error) {
 	}
 
 	if wal.lastLogSequenceNumber, err = wal.getLastLogSequenceNumber(); err != nil {
-		return nil, fmt.Errorf("Failed  getting lsn: %w", err)
+		return nil, fmt.Errorf("failed getting lsn: %w", err)
 	}
 
 	go wal.syncPeriodically()
@@ -108,11 +108,6 @@ func (wal *WriteAheadLog) WriteRecord(data []byte) error {
 	wal.lock.Lock()
 	defer wal.lock.Unlock()
 
-	// TODO: Log rotation
-	if err := wal.rotateLogIfNeeded(); err != nil {
-		return fmt.Errorf("failed to rotate log: %w", err)
-	}
-
 	logSeqNumber := wal.lastLogSequenceNumber + 1
 
 	newRecord := &pb.WalRecord{
@@ -122,21 +117,31 @@ func (wal *WriteAheadLog) WriteRecord(data []byte) error {
 		Checksum:          crc32.ChecksumIEEE(append(data, byte(logSeqNumber))),
 	}
 
-	err := wal.writeToBuffer(newRecord)
+	marshaledRecord, err := gpb.Marshal(newRecord)
 	if err != nil {
+		return err
+	}
+
+	if err := wal.rotateLogIfNeeded(len(marshaledRecord)); err != nil {
+		return err
+	}
+
+	if err := wal.writeToBuffer(marshaledRecord); err != nil {
 		return err
 	}
 	wal.lastLogSequenceNumber = logSeqNumber
 	return nil
 }
 
-func (wal *WriteAheadLog) rotateLogIfNeeded() any {
+func (wal *WriteAheadLog) rotateLogIfNeeded(currDataLength int) error {
 	fileInfo, err := wal.currSegmentFile.Stat()
 	if err != nil {
 		return err
 	}
 
-	if fileInfo.Size()+int64(wal.bufferWriter.Buffered()) >= wal.maxFileSize {
+	fmt.Printf("Current %s, SIZE: %d Buff: %d\n", fileInfo.Name(), fileInfo.Size(), wal.bufferWriter.Buffered())
+
+	if fileInfo.Size()+int64(wal.bufferWriter.Buffered()+currDataLength) >= wal.maxFileSize {
 		if err := wal.rotateLog(); err != nil {
 			return err
 		}
@@ -145,7 +150,7 @@ func (wal *WriteAheadLog) rotateLogIfNeeded() any {
 	return nil
 }
 
-func (wal *WriteAheadLog) rotateLog() any {
+func (wal *WriteAheadLog) rotateLog() error {
 	if err := wal.Sync(); err != nil {
 		return err
 	}
@@ -189,18 +194,14 @@ func (wal *WriteAheadLog) Close() error {
 	return wal.currSegmentFile.Close()
 }
 
-func (wal *WriteAheadLog) writeToBuffer(record *pb.WalRecord) error {
-	marshaledRecord, err := gpb.Marshal(record)
-	if err != nil {
-		return fmt.Errorf("failed to marshal record: %w", err)
-	}
+func (wal *WriteAheadLog) writeToBuffer(marshaledRecord []byte) error {
 	recordSize := int32(len(marshaledRecord))
 	// write the record size to the buffer
 	if err := binary.Write(wal.bufferWriter, binary.LittleEndian, recordSize); err != nil {
 		return fmt.Errorf("failed to write record size: %w", err)
 	}
 	// write the marshaled record to the buffer
-	_, err = wal.bufferWriter.Write(marshaledRecord)
+	_, err := wal.bufferWriter.Write(marshaledRecord)
 
 	return err
 }
@@ -238,12 +239,12 @@ func (wal *WriteAheadLog) syncPeriodically() {
 
 func (wal *WriteAheadLog) Sync() error {
 	if err := wal.bufferWriter.Flush(); err != nil {
-		return fmt.Errorf("Failed to flush buffer: %w", err)
+		return fmt.Errorf("failed to flush buffer: %w", err)
 	}
 
 	if wal.enableForceSync {
 		if err := wal.currSegmentFile.Sync(); err != nil {
-			return fmt.Errorf("Failed to sync segment file: %w", err)
+			return fmt.Errorf("failed to sync segment file: %w", err)
 		}
 	}
 
@@ -254,14 +255,14 @@ func (wal *WriteAheadLog) Sync() error {
 func loadLastSegmentFile(config *Config) (*os.File, int, error) {
 	files, err := filepath.Glob(filepath.Join(config.Directory, SegmentPrefix+"*"))
 	if err != nil {
-		return nil, 0, fmt.Errorf("Failed reading WAL files: %w", err)
+		return nil, 0, fmt.Errorf("failed reading WAL files: %w", err)
 	}
 
 	// No existing WAL files, create a new one
 	if len(files) == 0 {
 		file, err := createNewSegmentFile(config.Directory, 0)
 		if err != nil {
-			return nil, 0, fmt.Errorf("Failed creating new WAL segment file: %w", err)
+			return nil, 0, fmt.Errorf("failed creating new WAL segment file: %w", err)
 		}
 
 		return file, 0, nil
@@ -269,13 +270,13 @@ func loadLastSegmentFile(config *Config) (*os.File, int, error) {
 
 	lastSegmentFileNumber, err := getLastSegmentFileNumber(files, SegmentPrefix)
 	if err != nil {
-		return nil, 0, fmt.Errorf("Failed getting last segment file number: %w", err)
+		return nil, 0, fmt.Errorf("failed getting last segment file number: %w", err)
 	}
 
 	segmentFilePath := filepath.Join(config.Directory, fmt.Sprintf("%s%d.log", SegmentPrefix, lastSegmentFileNumber))
 	file, err := os.OpenFile(segmentFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return nil, lastSegmentFileNumber, fmt.Errorf("Failed opening last segment file: %w", err)
+		return nil, lastSegmentFileNumber, fmt.Errorf("failed opening last segment file: %w", err)
 	}
 
 	return file, lastSegmentFileNumber, nil

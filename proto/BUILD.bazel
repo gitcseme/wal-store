@@ -1,3 +1,4 @@
+load("@rules_go//go:def.bzl", "go_library")
 load("@rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 
@@ -12,4 +13,15 @@ go_proto_library(
     importpath = "walproto/proto",
     proto = ":proto_proto",
     visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "proto",
+    srcs = ["walproto.pb.go"],
+    importpath = "walstore/proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
 )
