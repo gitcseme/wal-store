@@ -139,9 +139,9 @@ func (wal *WriteAheadLog) rotateLogIfNeeded(currDataLength int) error {
 		return err
 	}
 
-	fmt.Printf("Current %s, SIZE: %d Buff: %d\n", fileInfo.Name(), fileInfo.Size(), wal.bufferWriter.Buffered())
+	bufferSizeWouldBe := fileInfo.Size() + int64(wal.bufferWriter.Buffered()) + int64(currDataLength)
 
-	if fileInfo.Size()+int64(wal.bufferWriter.Buffered()+currDataLength) >= wal.maxFileSize {
+	if bufferSizeWouldBe >= wal.maxFileSize {
 		if err := wal.rotateLog(); err != nil {
 			return err
 		}
@@ -178,9 +178,45 @@ func (wal *WriteAheadLog) rotateLog() error {
 }
 
 func (wal *WriteAheadLog) deleteOldestSegmentFile() error {
-	// panic("unimplemented")
-	fmt.Println("Deleting oldest segment file is not implemented yet")
+	files, err := filepath.Glob(filepath.Join(wal.directory, SegmentPrefix+"*"))
+	if err != nil {
+		return err
+	}
+
+	if len(files) == 0 {
+		return nil
+	}
+
+	oldestSegmentFile, err := getOldestSegmentFile(files)
+	if err != nil {
+		return err
+	}
+
+	if err := os.Remove(oldestSegmentFile); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func getOldestSegmentFile(files []string) (string, error) {
+	if len(files) == 0 {
+		return "", nil
+	}
+
+	var oldestFile string
+	oldestSegmentNumber := int(^uint(0) >> 1) // Max int value
+	for _, file := range files {
+		var segmentNumber int
+		if _, err := fmt.Sscanf(filepath.Base(file), SegmentPrefix+"%d.log", &segmentNumber); err != nil {
+			return "", fmt.Errorf("failed to parse segment number from file %s: %w", file, err)
+		}
+		if segmentNumber < oldestSegmentNumber {
+			oldestSegmentNumber = segmentNumber
+			oldestFile = file
+		}
+	}
+	return oldestFile, nil
 }
 
 func (wal *WriteAheadLog) Close() error {
@@ -255,22 +291,22 @@ func (wal *WriteAheadLog) Sync() error {
 func loadLastSegmentFile(config *Config) (*os.File, int, error) {
 	files, err := filepath.Glob(filepath.Join(config.Directory, SegmentPrefix+"*"))
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed reading WAL files: %w", err)
+		return nil, 1, fmt.Errorf("failed reading WAL files: %w", err)
 	}
 
 	// No existing WAL files, create a new one
 	if len(files) == 0 {
-		file, err := createNewSegmentFile(config.Directory, 0)
+		file, err := createNewSegmentFile(config.Directory, 1)
 		if err != nil {
-			return nil, 0, fmt.Errorf("failed creating new WAL segment file: %w", err)
+			return nil, 1, fmt.Errorf("failed creating new WAL segment file: %w", err)
 		}
 
-		return file, 0, nil
+		return file, 1, nil
 	}
 
 	lastSegmentFileNumber, err := getLastSegmentFileNumber(files, SegmentPrefix)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed getting last segment file number: %w", err)
+		return nil, 1, fmt.Errorf("failed getting last segment file number: %w", err)
 	}
 
 	segmentFilePath := filepath.Join(config.Directory, fmt.Sprintf("%s%d.log", SegmentPrefix, lastSegmentFileNumber))
@@ -283,7 +319,7 @@ func loadLastSegmentFile(config *Config) (*os.File, int, error) {
 }
 
 func getLastSegmentFileNumber(files []string, segmentPrefix string) (int, error) {
-	var lastSegmentNumber int
+	var lastSegmentNumber int = 0
 	for _, file := range files {
 		var segmentNumber int
 		_, err := fmt.Sscanf(filepath.Base(file), segmentPrefix+"%d.log", &segmentNumber)

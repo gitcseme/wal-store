@@ -97,13 +97,14 @@ func Test_WALRotation(t *testing.T) {
 
 	defaultConfig := wal.CreateDefaultConfig(logDirectory)
 	defaultConfig.MaxFileSize = 1024 * 1 // Set a small max file size for testing
+	defaultConfig.MaxSegments = 5        // Limit the number of segments for testing
 
 	walog, err := wal.StartLogger(defaultConfig)
 	assert.NoError(t, err, "Failed to start logger")
 	defer walog.Close()
 
 	var testData []TestRecord
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 200; i++ {
 		testData = append(testData, TestRecord{
 			Op:    (i + 1) % 3,
 			Key:   fmt.Sprintf("key%d", i+1),
@@ -129,5 +130,6 @@ func Test_WALRotation(t *testing.T) {
 		assert.True(t, fileInfo.Size() <= defaultConfig.MaxFileSize, "WAL file size %d exceeds limit", fileInfo.Size())
 	}
 
+	assert.Equal(t, len(files), defaultConfig.MaxSegments, "Number of WAL segments mis-match")
 	assert.Greater(t, len(files), 1, "WAL rotation did not create multiple segments")
 }
