@@ -2,7 +2,9 @@ package tests
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"walstore/internal/wal"
 
@@ -84,4 +86,46 @@ func Test_LogSequenceNumber(t *testing.T) {
 	lastLogEntry := writtenLogs[len(writtenLogs)-1]
 
 	assert.Equal(t, uint64(len(testData)), lastLogEntry.GetLogSequenceNumber(), "Last log sequence number does not match")
+}
+
+func Test_WALRotation(t *testing.T) {
+	logDirectory := "/tmp/wal_test_rotation"
+	// defer os.RemoveAll(logDirectory) // Clean up after test
+
+	defaultConfig := wal.CreateDefaultConfig(logDirectory)
+	defaultConfig.MaxFileSize = 600 // Set a small max file size for testing
+
+	walog, err := wal.StartLogger(defaultConfig)
+	if err != nil {
+		t.Fatalf("Failed to start logger: %v", err)
+	}
+
+	var testData []TestRecord
+	for i := 0; i < 100; i++ {
+		testData = append(testData, TestRecord{
+			Op:    i + 1,
+			Key:   fmt.Sprintf("key%d", i+1),
+			Value: fmt.Sprintf("value%d", i+1),
+		})
+	}
+
+	for _, record := range testData {
+		marshaledData, err := json.Marshal(record)
+		assert.NoError(t, err, "Failed to marshal record")
+		assert.NoError(t, walog.WriteRecord(marshaledData), "Failed to write record")
+	}
+
+	assert.NoError(t, walog.Close(), "Failed to close logger")
+
+	files, err := filepath.Glob(filepath.Join(defaultConfig.Directory, wal.SegmentPrefix+"*"))
+	assert.NoError(t, err, "Failed to list WAL segment files")
+
+	for _, file := range files {
+		fmt.Printf("Segment file: %s\n", file)
+		fileInfo, err := os.Stat(file)
+		assert.NoError(t, err, "Failed to get file info")
+		assert.True(t, fileInfo.Size() <= defaultConfig.MaxFileSize, "WAL file size %d exceeds limit", fileInfo.Size())
+	}
+
+	assert.Greater(t, len(files), 1, "WAL rotation did not create multiple segments")
 }

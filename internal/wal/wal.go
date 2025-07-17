@@ -109,6 +109,10 @@ func (wal *WriteAheadLog) WriteRecord(data []byte) error {
 	defer wal.lock.Unlock()
 
 	// TODO: Log rotation
+	if err := wal.rotateLogIfNeeded(); err != nil {
+		return fmt.Errorf("failed to rotate log: %w", err)
+	}
+
 	logSeqNumber := wal.lastLogSequenceNumber + 1
 
 	newRecord := &pb.WalRecord{
@@ -123,6 +127,54 @@ func (wal *WriteAheadLog) WriteRecord(data []byte) error {
 		return err
 	}
 	wal.lastLogSequenceNumber = logSeqNumber
+	return nil
+}
+
+func (wal *WriteAheadLog) rotateLogIfNeeded() any {
+	fileInfo, err := wal.currSegmentFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	if fileInfo.Size()+int64(wal.bufferWriter.Buffered()) >= wal.maxFileSize {
+		if err := wal.rotateLog(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (wal *WriteAheadLog) rotateLog() any {
+	if err := wal.Sync(); err != nil {
+		return err
+	}
+
+	if err := wal.currSegmentFile.Close(); err != nil {
+		return err
+	}
+
+	if wal.currSegmentNumber+1 > wal.maxSegments {
+		if err := wal.deleteOldestSegmentFile(); err != nil {
+			return err
+		}
+	}
+
+	newSegmentFile, err := createNewSegmentFile(wal.directory, wal.currSegmentNumber+1)
+	if err != nil {
+		return fmt.Errorf("failed to create new segment file: %w", err)
+	}
+
+	wal.currSegmentFile = newSegmentFile
+	wal.bufferWriter = bufio.NewWriter(newSegmentFile)
+	wal.currSegmentNumber++
+
+	return nil
+}
+
+func (wal *WriteAheadLog) deleteOldestSegmentFile() error {
+	// panic("unimplemented")
+	fmt.Println("Deleting oldest segment file is not implemented yet")
 	return nil
 }
 
