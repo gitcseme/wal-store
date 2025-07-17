@@ -50,7 +50,7 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("Written log count: %d", len(writtenLogs))
+	fmt.Printf("written log count: %d", len(writtenLogs))
 
 	for _, log := range writtenLogs {
 		logEntry := Record{}

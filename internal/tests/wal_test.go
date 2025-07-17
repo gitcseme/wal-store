@@ -2,15 +2,21 @@ package tests
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"walstore/internal/wal"
 
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	LogDirectory = "/tmp/walogs"
+)
+
 func Test_WriteAndRecover(t *testing.T) {
-	logDirectory := "/tmp/wal_test"
+	logDirectory := LogDirectory + "/wal_test"
 	defer os.RemoveAll(logDirectory) // Clean up after test
 
 	defaultConfig := wal.CreateDefaultConfig(logDirectory)
@@ -50,7 +56,7 @@ func Test_WriteAndRecover(t *testing.T) {
 }
 
 func Test_LogSequenceNumber(t *testing.T) {
-	logDirectory := "/tmp/wal_test_seq"
+	logDirectory := LogDirectory + "/wal_seq_test"
 	defer os.RemoveAll(logDirectory) // Clean up after test
 
 	defaultConfig := wal.CreateDefaultConfig(logDirectory)
@@ -84,4 +90,46 @@ func Test_LogSequenceNumber(t *testing.T) {
 	lastLogEntry := writtenLogs[len(writtenLogs)-1]
 
 	assert.Equal(t, uint64(len(testData)), lastLogEntry.GetLogSequenceNumber(), "Last log sequence number does not match")
+}
+
+func Test_WALRotation(t *testing.T) {
+	logDirectory := LogDirectory + "/wal_rotation_test"
+
+	defaultConfig := wal.CreateDefaultConfig(logDirectory)
+	defaultConfig.MaxFileSize = 1024 * 1 // Set a small max file size for testing
+	defaultConfig.MaxSegments = 5        // Limit the number of segments for testing
+
+	walog, err := wal.StartLogger(defaultConfig)
+	assert.NoError(t, err, "Failed to start logger")
+	defer walog.Close()
+
+	var testData []TestRecord
+	for i := 0; i < 200; i++ {
+		testData = append(testData, TestRecord{
+			Op:    (i + 1) % 3,
+			Key:   fmt.Sprintf("key%d", i+1),
+			Value: fmt.Sprintf("value%d", i+1),
+		})
+	}
+
+	for _, record := range testData {
+		marshaledData, err := json.Marshal(record)
+		assert.NoError(t, err, "Failed to marshal record")
+		assert.NoError(t, walog.WriteRecord(marshaledData), "Failed to write record")
+	}
+
+	assert.NoError(t, walog.Close(), "Failed to close logger")
+
+	files, err := filepath.Glob(filepath.Join(defaultConfig.Directory, wal.SegmentPrefix+"*"))
+	assert.NoError(t, err, "Failed to list WAL segment files")
+
+	for _, file := range files {
+		fileInfo, err := os.Stat(file)
+		fmt.Printf("Segment file: %s size: %d\n", file, fileInfo.Size())
+		assert.NoError(t, err, "Failed to get file info")
+		assert.True(t, fileInfo.Size() <= defaultConfig.MaxFileSize, "WAL file size %d exceeds limit", fileInfo.Size())
+	}
+
+	assert.Equal(t, len(files), defaultConfig.MaxSegments, "Number of WAL segments mis-match")
+	assert.Greater(t, len(files), 1, "WAL rotation did not create multiple segments")
 }

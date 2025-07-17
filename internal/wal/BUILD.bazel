@@ -10,7 +10,7 @@ go_library(
     importpath = "walstore/internal/wal",
     visibility = ["//:__subpackages__"],
     deps = [
-        "//proto:proto_go_proto",
+        "//proto",
         "@org_golang_google_protobuf//proto",
     ],
 )
