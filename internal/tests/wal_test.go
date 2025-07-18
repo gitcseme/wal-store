@@ -94,6 +94,7 @@ func Test_LogSequenceNumber(t *testing.T) {
 
 func Test_WALRotation(t *testing.T) {
 	logDirectory := LogDirectory + "/wal_rotation_test"
+	defer os.RemoveAll(logDirectory) // Clean up after test
 
 	defaultConfig := wal.CreateDefaultConfig(logDirectory)
 	defaultConfig.MaxFileSize = 1024 * 1 // Set a small max file size for testing

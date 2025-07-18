@@ -18,7 +18,7 @@ type WriteAheadLog struct {
 	maxSegments           int           // Maximum number of segment files to keep
 	lock                  sync.Mutex    // Mutex to protect concurrent access to the WAL
 	syncTimer             *time.Timer   // Timer for periodic flushing of the buffer
-	enableForceSync       bool          // Flag to force sync on next write
+	shouldForceSync       bool          // Flag to force sync on next write
 	context               context.Context
 	cancel                context.CancelFunc // To cancel the background sync task
 }

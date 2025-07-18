@@ -51,7 +51,7 @@ func StartLogger(config *Config) (*WriteAheadLog, error) {
 		currSegmentNumber:     segmentNumber,
 		maxFileSize:           config.MaxFileSize,
 		maxSegments:           config.MaxSegments,
-		enableForceSync:       config.EnableForceSync,
+		shouldForceSync:       config.EnableForceSync,
 		lastLogSequenceNumber: 0,
 		bufferWriter:          bufio.NewWriter(segmentFile),
 		syncTimer:             time.NewTimer(SyncInterval),
@@ -242,7 +242,7 @@ func (wal *WriteAheadLog) writeToBuffer(marshaledRecord []byte) error {
 	return err
 }
 
-// TODO: Return one record only
+// TODO: Do not read all records, just get the last log sequence number
 func (wal *WriteAheadLog) getLastLogSequenceNumber() (uint64, error) {
 	records, err := wal.ReadAllRecords()
 	if err != nil {
@@ -278,7 +278,7 @@ func (wal *WriteAheadLog) Sync() error {
 		return fmt.Errorf("failed to flush buffer: %w", err)
 	}
 
-	if wal.enableForceSync {
+	if wal.shouldForceSync {
 		if err := wal.currSegmentFile.Sync(); err != nil {
 			return fmt.Errorf("failed to sync segment file: %w", err)
 		}
@@ -304,7 +304,7 @@ func loadLastSegmentFile(config *Config) (*os.File, int, error) {
 		return file, 1, nil
 	}
 
-	lastSegmentFileNumber, err := getLastSegmentFileNumber(files, SegmentPrefix)
+	lastSegmentFileNumber, err := getLastSegmentFileNumber(files)
 	if err != nil {
 		return nil, 1, fmt.Errorf("failed getting last segment file number: %w", err)
 	}
@@ -318,11 +318,11 @@ func loadLastSegmentFile(config *Config) (*os.File, int, error) {
 	return file, lastSegmentFileNumber, nil
 }
 
-func getLastSegmentFileNumber(files []string, segmentPrefix string) (int, error) {
+func getLastSegmentFileNumber(files []string) (int, error) {
 	var lastSegmentNumber int = 0
 	for _, file := range files {
 		var segmentNumber int
-		_, err := fmt.Sscanf(filepath.Base(file), segmentPrefix+"%d.log", &segmentNumber)
+		_, err := fmt.Sscanf(filepath.Base(file), SegmentPrefix+"%d.log", &segmentNumber)
 		if err != nil {
 			return 0, err
 		}
